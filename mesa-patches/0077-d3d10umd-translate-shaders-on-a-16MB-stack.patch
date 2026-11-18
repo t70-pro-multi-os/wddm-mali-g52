@@ -1,0 +1,58 @@
+diff --git a/src/gallium/frontends/d3d10umd/Shader.cpp b/src/gallium/frontends/d3d10umd/Shader.cpp
+index 194a00a..9656958 100644
+--- a/src/gallium/frontends/d3d10umd/Shader.cpp
++++ b/src/gallium/frontends/d3d10umd/Shader.cpp
+@@ -32,6 +32,7 @@
+ 
+ 
+ #include "Shader.h"
++#include "c11/threads.h"
+ #include "ShaderParse.h"
+ #include "State.h"
+ #include "Query.h"
+@@ -53,11 +54,44 @@
+  * length in dwords and a hash of the DXBC, which is the same for the same
+  * shader in every process.
+  */
++/*
++ * Shader_tgsi_translate keeps large tables on the stack (about 89 KiB measured
++ * in a crash dump) and DWM calls CreatePixelShader on composition threads
++ * with only about 128 KiB of stack: stack overflows (0xc00000fd) in dwm.exe on
++ * the Pixel 6. Translate on a thread with the 16 MiB c11 thrd_create stack
++ * (mesa-patches/0071) and wait for it.
++ */
++struct TranslateCall {
++   const unsigned *code;
++   unsigned *output_mapping;
++   const struct tgsi_token *tokens;
++};
++
++static int
++TranslateThunk(void *p)
++{
++   TranslateCall *c = (TranslateCall *)p;
++   c->tokens = Shader_tgsi_translate(c->code, c->output_mapping);
++   return 0;
++}
++
++static const struct tgsi_token *
++TranslateOnBigStack(const unsigned *code, unsigned *output_mapping)
++{
++   TranslateCall c = { code, output_mapping, NULL };
++   thrd_t t;
++
++   if (thrd_create(&t, TranslateThunk, &c) != thrd_success)
++      return Shader_tgsi_translate(code, output_mapping);
++   thrd_join(t, NULL);
++   return c.tokens;
++}
++
+ static const struct tgsi_token *
+ TimedTranslate(const unsigned *code, unsigned *output_mapping)
+ {
+    uint64_t t0 = mali_slow_now();
+-   const struct tgsi_token *tokens = Shader_tgsi_translate(code, output_mapping);
++   const struct tgsi_token *tokens = TranslateOnBigStack(code, output_mapping);
+ 
+    MALI_SLOW(t0, "dxbc-to-tgsi", "type %u, %u dwords, dxbc hash 0x%08x",
+              code[0] >> 16, code[1], (unsigned)_mesa_hash_data(code, (size_t)code[1] * 4));
