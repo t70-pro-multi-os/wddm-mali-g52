@@ -1,0 +1,152 @@
+diff --git a/src/c11/impl/threads_win32.c b/src/c11/impl/threads_win32.c
+index 91870ba..7ee849a 100644
+--- a/src/c11/impl/threads_win32.c
++++ b/src/c11/impl/threads_win32.c
+@@ -276,7 +276,11 @@ thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
+     if (!pack) return thrd_nomem;
+     pack->func = func;
+     pack->arg = arg;
+-    handle = _beginthreadex(NULL, 0, impl_thrd_routine, pack, CREATE_SUSPENDED, NULL);
++    /* An explicit reservation: 0 inherits the executable's default, and
++     * dwm.exe reserves only 512 KiB, which Mesa's shader compilers overrun
++     * (Panfrost on Valhall: stack overflows in dwm.exe on gs101). */
++    handle = _beginthreadex(NULL, 16u << 20, impl_thrd_routine, pack,
++                            CREATE_SUSPENDED | STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
+     if (handle == 0) {
+         free(pack);
+         if (errno == EAGAIN || errno == EACCES)
+diff --git a/src/gallium/drivers/panfrost/pan_shader.c b/src/gallium/drivers/panfrost/pan_shader.c
+index 970a271..909772b 100644
+--- a/src/gallium/drivers/panfrost/pan_shader.c
++++ b/src/gallium/drivers/panfrost/pan_shader.c
+@@ -17,6 +17,49 @@
+ #include "pan_context.h"
+ #include "pan_compiler.h"
+ #include "pan_nir.h"
++#include "c11/threads.h"
++
++/*
++ * Shader creation and compilation on a thread of their own on Windows. The
++ * D3D10 UMD runs in the caller's threads, and dwm.exe reserves only 512 KiB
++ * of stack per thread: NIR lowering plus the Valhall compiler overran it
++ * (stack overflow 0xc00000fd in dwm.exe as soon as the Start menu asked for
++ * new shaders). thrd_create reserves 16 MiB (c11 threads_win32.c); the
++ * caller waits, so nothing else changes.
++ */
++#ifdef _WIN32
++struct pan_big_stack_call {
++   void (*fn)(void *);
++   void *arg;
++};
++
++static int
++pan_big_stack_thunk(void *p)
++{
++   struct pan_big_stack_call *c = p;
++   c->fn(c->arg);
++   return 0;
++}
++
++static void
++pan_on_big_stack(void (*fn)(void *), void *arg)
++{
++   struct pan_big_stack_call c = { fn, arg };
++   thrd_t t;
++
++   if (thrd_create(&t, pan_big_stack_thunk, &c) != thrd_success) {
++      fn(arg);
++      return;
++   }
++   thrd_join(t, NULL);
++}
++#else
++static void
++pan_on_big_stack(void (*fn)(void *), void *arg)
++{
++   fn(arg);
++}
++#endif
+ #include "pan_trace.h"
+ #include "compiler/bifrost/bifrost_compile.h"
+ #include "shader_enums.h"
+@@ -94,12 +137,48 @@ lower_sample_mask_writes(nir_builder *b, nir_intrinsic_instr *intrin,
+    return true;
+ }
+ 
++static void
++panfrost_shader_compile_impl(struct panfrost_screen *screen, const nir_shader *ir,
++                             struct util_debug_callback *dbg,
++                             const struct pan_varying_layout *varying_layout,
++                             struct panfrost_shader_key *key, unsigned req_local_mem,
++                             struct panfrost_shader_binary *out);
++
++struct pan_compile_args {
++   struct panfrost_screen *screen;
++   const nir_shader *ir;
++   struct util_debug_callback *dbg;
++   const struct pan_varying_layout *varying_layout;
++   struct panfrost_shader_key *key;
++   unsigned req_local_mem;
++   struct panfrost_shader_binary *out;
++};
++
++static void
++pan_compile_call(void *p)
++{
++   struct pan_compile_args *a = p;
++   panfrost_shader_compile_impl(a->screen, a->ir, a->dbg, a->varying_layout, a->key,
++                                a->req_local_mem, a->out);
++}
++
+ static void
+ panfrost_shader_compile(struct panfrost_screen *screen, const nir_shader *ir,
+                         struct util_debug_callback *dbg,
+                         const struct pan_varying_layout *varying_layout,
+                         struct panfrost_shader_key *key, unsigned req_local_mem,
+                         struct panfrost_shader_binary *out)
++{
++   struct pan_compile_args a = { screen, ir, dbg, varying_layout, key, req_local_mem, out };
++   pan_on_big_stack(pan_compile_call, &a);
++}
++
++static void
++panfrost_shader_compile_impl(struct panfrost_screen *screen, const nir_shader *ir,
++                             struct util_debug_callback *dbg,
++                             const struct pan_varying_layout *varying_layout,
++                             struct panfrost_shader_key *key, unsigned req_local_mem,
++                             struct panfrost_shader_binary *out)
+ {
+    PAN_TRACE_FUNC(PAN_TRACE_GL_SHADER);
+ 
+@@ -653,6 +732,19 @@ panfrost_create_shader_state_body(struct pipe_context *pctx,
+    return so;
+ }
+ 
++struct pan_create_args {
++   struct pipe_context *pctx;
++   const struct pipe_shader_state *cso;
++   struct panfrost_uncompiled_shader *so;
++};
++
++static void
++pan_create_call(void *p)
++{
++   struct pan_create_args *a = p;
++   a->so = panfrost_create_shader_state_body(a->pctx, a->cso);
++}
++
+ /* All of a shader's creation: translation, lowering, and the default
+  * variant when it is compiled now, for the slow-operation log. */
+ static void *
+@@ -660,8 +752,9 @@ panfrost_create_shader_state(struct pipe_context *pctx,
+                              const struct pipe_shader_state *cso)
+ {
+    uint64_t slow_t0 = mali_slow_now();
+-   struct panfrost_uncompiled_shader *so =
+-      panfrost_create_shader_state_body(pctx, cso);
++   struct pan_create_args a = { pctx, cso, NULL };
++   pan_on_big_stack(pan_create_call, &a);
++   struct panfrost_uncompiled_shader *so = a.so;
+ 
+    MALI_SLOW(slow_t0, "shader-create", "%s, shader %p",
+              so ? mesa_shader_stage_name(so->nir->info.stage) : "none", (void *)so);
