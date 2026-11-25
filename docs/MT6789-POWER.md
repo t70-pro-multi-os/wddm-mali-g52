@@ -4,7 +4,7 @@ The upstream driver expects the firmware to power the GPU and describe it in
 ACPI (as edk2-rk3576 does for the RK3576). On the T70 Pro that is
 `GpuPowerDxe` in Mu-Silicium (`Platforms/Teclast/t70proPkg/Drivers/GpuPowerDxe`).
 No tablet was available while this was written, so every value was checked
-against three stock sources instead of the hardware:
+against four stock sources instead of the hardware:
 
 - **DT**: the T70 Pro's own effective stock device tree (sha256 `a3dd45e2...`),
   as recorded in the node audit of 2026-11 (`/soc/mali@13000000`,
@@ -12,12 +12,37 @@ against three stock sources instead of the hardware:
 - **SRC**: MediaTek's MT6789 kernel sources (adomerle/android_kernel_mediatek_mt6789,
   `alps-mp-s0.mp1`): `gpufreq_mt6789.[ch]`, `clk-mt6789.c`,
   `clk-mt6789-mfgcfg.c`, `clk-pll.c`, `clk-mux.c`, `mt6358-regulator.c`.
+- **KO**: the T70's own `mtk_gpufreq_mt6789.ko`, from the stock package
+  `T70Pro(G3D1)_Android 16_V1.08_20260803_ROW_SZ` (`super.img`,
+  `vendor_dlkm_a`), disassembled. Its sha256 (`62806856...`) and that of
+  `mali_kbase_mt6789_a16w_jm.ko` (`3b5a27d7...`) equal the ones read from
+  the tablet's own `vendor_dlkm`, so it is the installed build. Where KO and
+  SRC differ, the firmware follows KO.
 - **FW**: what the Mu-Silicium firmware already had (`ClockImplLib`,
   `MT6358PmicDxe`, `MemoryMapLib`, the T70 DSDT).
 
-The T70's stock `vendor_dlkm` carries `mtk_gpufreq_mt6789.ko`
-(sha256 `62806856...`) and `mali_kbase_mt6789_a16w_jm.ko`. Those binaries are
-an Android 16 build and were **not** compared yet; see "Still open".
+## Where the T70 module differs from MediaTek's source
+
+| | SRC | KO (T70 V1.08) | Firmware |
+|---|---|---|---|
+| Rail order at power on | `vsram_gpu`, then `vgpu` | `vgpu`, then `vsram_gpu` (handles: `_vgpu` at +0, `_vsram_gpu` at +8, enabled +0 then +8) | KO |
+| Way enable `INFRA_BCRM +0x4C` [12:11] | written at power on and off | not written | KO |
+| `mfg_pll_sel` to MFGPLL | one `clk_set_parent` | `clk_set_parent`, then `CLK_CFG_4` bit 18 checked and retried with 10 us waits | KO |
+| BG3D gate | before `mfg_pll_sel` | after `mfg_pll_sel` | KO |
+| GPU timestamp `MFG_TOP +0x130` = 3 | separate function | right after the clocks, inside power on | KO |
+| Operating table | 45 points, 1100 MHz 850 mV to 390 MHz 625 mV | same 45 frequencies and post-dividers, up to 50 mV more: 1100 MHz 900 mV to 390 MHz 675 mV, `vsram_gpu` 750 mV at the bottom | KO opp44 |
+
+Identical in SRC and KO: the MFG0 to MFG3 sequence (`PWR_CON` `0x308` to
+`0x314`, status `0x16C`/`0x170` bits 2 to 5, 10 us polls up to 501 times,
+100 us before `PWR_CLK_DIS`), the MFG1 bus protection release
+(`0x80` to `+0x718`, `0x600000` to `+0x2A4`, `0x60` to `+0x718`,
+`0x200000` to `+0x2AC`), the `mfg_ref_sel` gate between MFG1 and MFG2, and
+the `MFG_TOP` writes (`+0x20 |= 0x3C00000`, `+0xB0 &= ~0x600`,
+`+0xB4 |= 0x10`, `+0xB0` clear bit 8 and set bit 19, `+0x24 |= 1`,
+`+0xF60 |= 1`). The DT operating table (`/soc/opp-table0`) equals KO's.
+
+The stock preloader carries "latch VGPU %d uV" and "latch VSRAM_GPU %d uV":
+it sets both rails before Linux. The read-only build records what it left.
 
 ## Addresses and interrupts
 
@@ -56,10 +81,10 @@ and `vldo28`, so the GPU rails are the MT6358 ones.
 
 ## The stock power-on, and what the firmware does
 
-`__gpufreq_power_control(POWER_ON)`:
+`__gpufreq_power_control(POWER_ON)` as in SRC (see above for what KO changes):
 
-1. `INFRA_BCRM +0x4C` bits 11 and 12 set (way enable).
-2. `__gpufreq_buck_control`: enable `vsram_gpu`, then `vgpu`.
+1. `INFRA_BCRM +0x4C` bits 11 and 12 set (way enable). Not in KO.
+2. `__gpufreq_buck_control`: enable `vsram_gpu`, then `vgpu`. KO: `vgpu` first.
 3. `__gpufreq_mtcmos_control` (`GPUFREQ_SELF_CTRL_MTCMOS` is 1 on MT6789):
    MFG0 on, MFG1 on and its bus protection released in the order
    STEP2_1, STEP2_0, STEP1_1, STEP1_0, `mfg_ref_sel` gate on, MFG2 on, MFG3 on.
@@ -71,18 +96,18 @@ and `vldo28`, so the GPU rails are the MT6358 ones.
    (`+0x20` bits 22 to 25, `+0xB0` clear bits 9 and 10, `+0xB4` bit 4,
    `+0xB0` set bit 19 and clear bit 8, `+0x24` bit 0, `+0xF60` bit 0).
 
-`GpuPowerDxe` follows that order exactly. The differences:
+`GpuPowerDxe` follows KO's order: rails (`vgpu`, `vsram_gpu`), MFG0, MFG1
+and its bus protection, `mfg_ref_sel`, MFG2, MFG3, MFGPLL, `mfg_pll_sel`
+checked, BG3D, the `MFG_TOP` writes, the timestamp, then `GPU_ID`. The
+differences from KO:
 
 - The stock driver waits up to 5 ms per step and carries on after a timeout.
   The firmware stops at the first step that does not complete and records it.
 - The stock driver starts at the operating point that matches the frequency
   the preloader left, then lets DVFS move it. The firmware sets one fixed
-  point: 390 MHz (MFGPLL, posdiv 4, PCW `0xF0000`), `vgpu` 675 mV,
-  `vsram_gpu` 750 mV. The stock table in SRC has 625 mV at 390 MHz and the
-  T70 DT 675 mV; the higher one is used because the per-chip AVS and aging
-  adjustments are not applied. `vsram_gpu` follows the stock rule (750 mV
-  while `vgpu` is at or below 750 mV) and stays within `MAX_BUCK_DIFF`
-  (200 mV).
+  point, KO's opp44: 390 MHz (MFGPLL, posdiv 4, PCW `0xF0000`), `vgpu`
+  675 mV, `vsram_gpu` 750 mV. The per-chip AVS and aging adjustments are
+  not applied.
 - Voltages are set before the rails are enabled, keeping `vsram_gpu` at or
   above `vgpu` in between (the stock `__gpufreq_volt_scale_gpu` order).
 - MFGPLL is changed only while `mfg_pll_sel` points at `mfg_ref`.
@@ -116,8 +141,5 @@ GPU0, and Windows Setup starts normally.
 
 ## Still open
 
-- Compare the T70's own `mtk_gpufreq_mt6789.ko` with SRC: the register
-  offsets, the MTCMOS order, the bus protection masks and the operating
-  table. It needs the module from the tablet or from the stock image.
 - Read the record of the read-only build on the tablet: it shows what the
   preloader leaves (`MFGPLL`, rails, domains) before anything is changed.
