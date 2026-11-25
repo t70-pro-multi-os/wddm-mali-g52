@@ -1,5 +1,10 @@
 # wddm-mali-g52
 
+> **This is the `mt6789` branch of a fork.** It ports the driver to the
+> Mali-G57 MC2 in the MediaTek MT6789 on the Teclast T70 Pro. What is known
+> about that hardware and the plan are in [docs/MT6789.md](docs/MT6789.md).
+> Everything below is upstream's README, about the RK3576.
+
 A Windows (WDDM) driver for the Arm Mali-G52 GPU in the Rockchip RK3576.
 
 ![Device Manager: Rockchip RK3576 Mali-G52 (WDDM), this device is working properly](docs/results/tspi3m-2026-11-13/device-manager-on-mali.jpg)
