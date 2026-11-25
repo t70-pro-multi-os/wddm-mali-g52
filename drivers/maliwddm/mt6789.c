@@ -59,7 +59,7 @@
 /* The T70 V1.08 mtk_gpufreq_mt6789.ko g_default_gpu table: kHz, vgpu and
  * vsram in 10 uV, the PLL post-divider as 2^n. Index 44 is what the
  * firmware sets. */
-static const struct { ULONG Khz; USHORT Vgpu, Vsram; UCHAR Posdiv; } MtOpp[] = {
+static const struct { ULONG Khz, Vgpu, Vsram; UCHAR Posdiv; } MtOpp[] = {
     { 1100000, 90000, 90000, 1 }, { 1086000, 89375, 89375, 1 }, { 1072000, 88750, 88750, 1 },
     { 1058000, 88125, 88125, 1 }, { 1045000, 87500, 87500, 1 }, { 1031000, 86875, 86875, 1 },
     { 1017000, 86250, 86250, 1 }, { 1003000, 85625, 85625, 1 }, {  990000, 85000, 85000, 1 },
@@ -225,7 +225,7 @@ static NTSTATUS RailSet(UINT32 Reg, ULONG Uv)
     st = Pmic(FALSE, Reg, 0, &v);
     if (!NT_SUCCESS(st))
         return st;
-    if ((v & 0x7F) == sel)
+    if ((ULONG)(v & 0x7F) == sel)
         return STATUS_SUCCESS;
     return Pmic(TRUE, Reg, (USHORT)((v & ~0x7Fu) | sel), NULL);
 }
