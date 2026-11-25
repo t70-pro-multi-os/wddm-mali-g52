@@ -6,11 +6,19 @@ DRV = ../../drivers/malikm
 
 COMMON = ../../drivers/common
 
-malikm-host: test.c sim.c mock.c $(DRV)/gpu.c $(DRV)/uapi.c $(DRV)/malikm.h $(COMMON)/maligpu.c $(COMMON)/maligpu.h mock/ntddk.h sim.h
-	$(CC) $(CFLAGS) -o $@ test.c sim.c mock.c $(DRV)/gpu.c $(DRV)/uapi.c $(COMMON)/maligpu.c
+SRC = test.c sim.c mock.c $(DRV)/gpu.c $(DRV)/uapi.c $(COMMON)/maligpu.c
+DEPS = $(SRC) $(DRV)/malikm.h $(COMMON)/maligpu.h mock/ntddk.h sim.h
 
-run: malikm-host
+# The RK3576's G52 and the MT6789's G57 (the mt6789 branch's own build).
+malikm-host: $(DEPS)
+	$(CC) $(CFLAGS) -DMALI_SOC_RK3576 -o $@ $(SRC)
+
+malikm-host-g57: $(DEPS)
+	$(CC) $(CFLAGS) -DMALI_SOC_MT6789 -DSIM_GPU_ID=0x90930010u -DSIM_PROD=0x9093 -DSIM_REV=0x0010 -o $@ $(SRC)
+
+run: malikm-host malikm-host-g57
 	./malikm-host
+	./malikm-host-g57
 
 clean:
-	rm -f malikm-host
+	rm -f malikm-host malikm-host-g57

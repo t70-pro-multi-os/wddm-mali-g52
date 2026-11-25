@@ -949,9 +949,14 @@ static VOID VsyncDpc(PKDPC Dpc, PVOID Context, PVOID Arg1, PVOID Arg2)
 static VOID CopyThread(PVOID Context)
 {
     MW_ADAPTER *a = (MW_ADAPTER *)Context;
-    KAFFINITY big = (KAFFINITY)0xF0 & KeQueryActiveProcessors();
-
+#ifdef MALI_SOC_MT6789
+    /* The Cortex-A76 cores are 6 and 7 on the MT6789. */
+    KAFFINITY big = (KAFFINITY)0xC0 & KeQueryActiveProcessors();
+#else
     /* The Cortex-A72 cores are 4 to 7 on the RK3576. */
+    KAFFINITY big = (KAFFINITY)0xF0 & KeQueryActiveProcessors();
+#endif
+
     if (big != 0)
         KeSetSystemAffinityThreadEx(big);
     KeSetPriorityThread(KeGetCurrentThread(), 15);
@@ -1224,12 +1229,12 @@ NTSTATUS APIENTRY MwGetNodeMetadata(IN_CONST_HANDLE hAdapter, UINT NodeOrdinal,
         Arg->GpuMmuSupported = MwGpuMmu();     /* the same bit as DRIVERCAPS and PHYSICALADAPTERCAPS */
         if (MwPlan.Engine[node] == MW2_ENGINE_COPY) {
             Arg->EngineType = DXGK_ENGINE_TYPE_COPY;
-            (void)RtlStringCbCopyW(Arg->FriendlyName, sizeof(Arg->FriendlyName), L"Mali-G52 paging");
+            (void)RtlStringCbCopyW(Arg->FriendlyName, sizeof(Arg->FriendlyName), MALI_GPU_NAME L" paging");
             return STATUS_SUCCESS;
         }
     }
     Arg->EngineType = DXGK_ENGINE_TYPE_3D;
-    (void)RtlStringCbCopyW(Arg->FriendlyName, sizeof(Arg->FriendlyName), L"Mali-G52 job manager");
+    (void)RtlStringCbCopyW(Arg->FriendlyName, sizeof(Arg->FriendlyName), MALI_GPU_NAME L" job manager");
     return STATUS_SUCCESS;
 }
 

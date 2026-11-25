@@ -1,6 +1,6 @@
 @echo off
 rem m5-wddm-test: M5.2 steps (a)/(b) on the board. Replaces malidod (or
-rem whatever drives ACPI\RKCP7402) with maliwddm from this stick, restarts
+rem whatever drives ACPI\HANA678E) with maliwddm from this stick, restarts
 rem the device, and saves the driver's trace; m5test runs from m5-wddm-check.cmd. Output: m5-wddm-out.txt here.
 rem
 rem When an older maliwddm is already loaded, restart-device keeps the OLD
@@ -13,8 +13,8 @@ rem not work either, boot WinPE from this stick and run m5-wddm-rescue.cmd.
 net session >nul 2>&1 || (echo Run this from an ADMINISTRATOR command prompt. & pause & exit /b 1)
 set HERE=%~dp0
 set OUT=%HERE%m5-wddm-out.txt
-set DEV=ACPI\RKCP7402\0
-set KEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\RKCP7402\0\Device Parameters"
+set DEV=ACPI\HANA678E\0
+set KEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\HANA678E\0\Device Parameters"
 echo m5-wddm-test %date% %time% > "%OUT%"
 
 echo == removing malidod from the driver store >> "%OUT%"

@@ -7,8 +7,8 @@ rem is actually running). Output: m5-wddm-check.txt here.
 net session >nul 2>&1 || (echo Run this from an ADMINISTRATOR command prompt. & pause & exit /b 1)
 set HERE=%~dp0
 set OUT=%HERE%m5-wddm-check.txt
-set DEV=ACPI\RKCP7402\0
-set KEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\RKCP7402\0\Device Parameters"
+set DEV=ACPI\HANA678E\0
+set KEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\HANA678E\0\Device Parameters"
 echo m5-wddm-check %date% %time% > "%OUT%"
 echo == devices >> "%OUT%"
 pnputil /enum-devices /instanceid "%DEV%" >> "%OUT%" 2>&1

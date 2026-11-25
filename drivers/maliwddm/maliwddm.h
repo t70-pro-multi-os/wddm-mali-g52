@@ -26,6 +26,20 @@
 #define DISPLAY_ADAPTER_HW_ID   0xFFFFFFFFu
 #endif
 
+#ifdef MALI_SOC_MT6789
+/* The MT6789's GPU clock and supplies (mt6789.c). */
+typedef struct _MW_MT6789 {
+    PUCHAR Apmixed, Topckgen;   /* MFGPLL and mfg_pll_sel, mapped for the start */
+    ULONG Opp;                  /* index in the T70 module's table; 44 is the firmware's 390 MHz */
+    ULONG Changes, Fails, LastBusy;
+    BOOLEAN GovOn;              /* the governor runs (setting Dvfs 1) */
+    volatile LONG FaultAsked;   /* a job fault: to the lowest point */
+    KEVENT Stop;
+    PVOID Thread;
+    ULONG64 LastTick, LastJobTicks, LastRun;
+} MW_MT6789;
+#endif
+
 #define MW_TAG                  'dwlM'
 #define MW_SEGMENT_ID           1           /* the aperture segment */
 #define MW_SEGMENT_SIZE         (1024ULL * 1024 * 1024)
@@ -560,6 +574,9 @@ struct _MW_ADAPTER {
 
     /* HDMI hot-plug, all of it behind HdmiHpd (hdmi.c, hpd.c). */
     MW_HDMI Hdmi;
+#ifdef MALI_SOC_MT6789
+    MW_MT6789 Mt;
+#endif
 };
 
 /* The picture's size in the framebuffer: the firmware's, unless the window
@@ -718,6 +735,15 @@ void MwCommandStop(MW_ADAPTER *A);
 void MwArmPoll(MW_ADAPTER *A);
 void MwCommandSettings(MW_ADAPTER *A);
 NTSTATUS MwPerfSnapshot(MW_ADAPTER *A, MW_ESCAPE_PERF_DATA *D);   /* PASSIVE; the queue's part */
+
+/* mt6789.c: the MT6789's GPU clock and supplies */
+#ifdef MALI_SOC_MT6789
+ULONG MwMt6789Start(MW_ADAPTER *A);
+void MwMt6789Stop(MW_ADAPTER *A);
+void MwMt6789Fault(MW_ADAPTER *A);
+ULONG MwMt6789GpuHz(MW_ADAPTER *A, PULONG Raw);
+ULONG MwMt6789MaxHz(MW_ADAPTER *A);
+#endif
 
 /* hdmi.c: the RK3576 HDMI hardware, ported from edk2-rk3576 */
 NTSTATUS MwHdmiMap(MW_ADAPTER *A);

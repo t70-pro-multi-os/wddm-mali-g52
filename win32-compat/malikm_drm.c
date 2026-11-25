@@ -3072,10 +3072,29 @@ fake_drm(uint32_t nr, uint8_t *b, uint32_t size)
          [DRM_PANFROST_PARAM_NR_CORE_GROUPS] = 1,
          [DRM_PANFROST_PARAM_SELECTED_COHERENCY] = DRM_PANFROST_GPU_COHERENCY_NONE,
       };
+      /* MALIKM_FAKE_GPU=g57: the MT6789's Mali-G57 MC2 (Valhall v9), so the
+       * same runs compile v9 shaders and build v9 job chains. */
+      static const uint64_t g57[] = {
+         [DRM_PANFROST_PARAM_GPU_PROD_ID] = 0x9093,
+         [DRM_PANFROST_PARAM_GPU_REVISION] = 0x0010,
+         [DRM_PANFROST_PARAM_SHADER_PRESENT] = 0x3,
+         [DRM_PANFROST_PARAM_TILER_PRESENT] = 0x1,
+         [DRM_PANFROST_PARAM_L2_PRESENT] = 0x1,
+         [DRM_PANFROST_PARAM_AS_PRESENT] = 0xff,
+         [DRM_PANFROST_PARAM_JS_PRESENT] = 0x7,
+         [DRM_PANFROST_PARAM_L2_FEATURES] = 0x07120206,
+         [DRM_PANFROST_PARAM_CORE_FEATURES] = 0x0,
+         [DRM_PANFROST_PARAM_TILER_FEATURES] = 0x809,
+         [DRM_PANFROST_PARAM_MEM_FEATURES] = 0x1,
+         [DRM_PANFROST_PARAM_MMU_FEATURES] = 0x2830,
+         [DRM_PANFROST_PARAM_NR_CORE_GROUPS] = 1,
+         [DRM_PANFROST_PARAM_SELECTED_COHERENCY] = DRM_PANFROST_GPU_COHERENCY_NONE,
+      };
+      const char *gpu = getenv("MALIKM_FAKE_GPU");
       if (a->param > DRM_PANFROST_PARAM_AFBC_FEATURES &&
           a->param != DRM_PANFROST_PARAM_SELECTED_COHERENCY)
          return -MK_EINVAL;
-      a->value = v[a->param];
+      a->value = gpu && !strcmp(gpu, "g57") ? g57[a->param] : v[a->param];
       return 0;
    }
    case MALIKM_NR_PANFROST_CREATE_BO: {

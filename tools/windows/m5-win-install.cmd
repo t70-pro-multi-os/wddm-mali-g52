@@ -1,6 +1,6 @@
 @echo off
 rem m5-win-install: M5.2 steps (d)/(e) on the board's installed Windows (not
-rem WinPE). Installs maliwddm as the display adapter for ACPI\RKCP7402, with
+rem WinPE). Installs maliwddm as the display adapter for ACPI\HANA678E, with
 rem Mesa's d3d10umd (Panfrost) as its UMD, maliumd.dll. Then reboot and run
 rem m5-win-check.cmd.
 rem
@@ -17,8 +17,8 @@ net session >nul 2>&1 || (echo Run this from an ADMINISTRATOR command prompt. & 
 setlocal
 set HERE=%~dp0
 set OUT=%HERE%m5-win-install-out.txt
-set DEV=ACPI\RKCP7402\0
-set KEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\RKCP7402\0\Device Parameters"
+set DEV=ACPI\HANA678E\0
+set KEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\HANA678E\0\Device Parameters"
 echo m5-win-install %date% %time% > "%OUT%"
 ver >> "%OUT%"
 

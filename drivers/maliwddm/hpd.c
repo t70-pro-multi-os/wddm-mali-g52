@@ -80,12 +80,19 @@ void MwHpdSettings(MW_ADAPTER *A)
      * which the firmware adds only for a lit DSI panel (backlight.c);
      * MwBacklightStart, which maps it, runs later. Trace: Hpd_LevelFrom 0
      * from the setting, 1 the HDMI boot's default, 2 the panel's. */
+#ifdef MALI_SOC_MT6789
+    /* The MT6789 has no HDMI: level 0, so none of the RK3576 HDMI blocks
+     * (hdmi.c) is ever mapped. */
+    H->Level = 0;
+    MwLog(A, L"Hpd_LevelFrom", 3u);
+#else
     {
         ULONG set = MwSetting(A, L"HdmiHpd", MW_HPD_UNSET);
         BOOLEAN panel = set == MW_HPD_UNSET && MwBacklightPresent(A);
         H->Level = MwHpdLevelFor(set, panel);
         MwLog(A, L"Hpd_LevelFrom", set != MW_HPD_UNSET ? 0u : (panel ? 2u : 1u));
     }
+#endif
     if (H->Level == 0)
         return;
     H->Source = MwSetting(A, L"HdmiHpdSource", 0);

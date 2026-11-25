@@ -101,11 +101,16 @@ static int fail(const char *what, NTSTATUS st)
     return 2;
 }
 
-/* M1's job: a WRITE_VALUE header at +0, its payload at +32. */
+/* GPU_ID >> 16 of the adapter found (0x7402 G52, 0x9093 G57). */
+static UINT64 g_gpu_id;
+
+/* M1's job: a WRITE_VALUE header at +0, its payload at +32. Bifrost has an
+ * is_64b bit (word 4 bit 0); Valhall (v9, arch from GPU_ID bits 15:12) has
+ * none and wants the descriptor 128-byte aligned. */
 static void write_job(volatile UINT32 *job, UINT64 target, UINT32 value)
 {
     memset((void *)job, 0, 64);
-    job[4] = 1u | (2u << 1) | (1u << 16);   /* is_64b, WRITE_VALUE, index 1 */
+    job[4] = ((g_gpu_id >> 12) < 9 ? 1u : 0u) | (2u << 1) | (1u << 16);   /* [is_64b,] WRITE_VALUE, index 1 */
     job[8] = (UINT32)target;
     job[9] = (UINT32)(target >> 32);
     job[10] = 6;                             /* immediate 32 */
@@ -180,8 +185,10 @@ static D3DKMT_HANDLE find_adapter(void)
         printf("adapter %lu (luid %08lx:%08lx): escape 0x%08lx, %u params, GPU_ID 0x%llx\n",
                i, info[i].AdapterLuid.HighPart, info[i].AdapterLuid.LowPart, (unsigned long)st,
                g.Count, (unsigned long long)g.Value[0]);
-        if (st >= 0 && g.Count != 0)
+        if (st >= 0 && g.Count != 0) {
+            g_gpu_id = g.Value[0];
             return info[i].hAdapter;
+        }
     }
     return 0;
 }

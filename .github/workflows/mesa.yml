@@ -392,6 +392,34 @@ jobs:
             if ($gout -notmatch "(?m)^UNSUPPORTED +$n ") { throw "gsso.exe step $n was not UNSUPPORTED on Panfrost" }
           }
 
+      - name: Panfrost on the emulated driver as the MT6789's Mali-G57 (MALIKM_FAKE_GPU=g57)
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          # The same triangle and present as above, with the emulated malikm
+          # reporting the T70 Pro's G57 (GPU_ID 0x9093, Valhall v9): Panfrost
+          # compiles v9 shaders and builds v9 job chains on Windows. Nothing
+          # runs them; what counts is that jobs are submitted, without a
+          # crash, a hang or a fall back to softpipe.
+          $env:GALLIUM_DRIVER = 'panfrost'
+          $env:MALIKM_FAKE = '2'
+          $env:MALIKM_FAKE_GPU = 'g57'
+          $dll = (Resolve-Path out\libgallium_d3d10.dll).Path
+          $res = @{}
+          foreach ($t in @(@('g57-triangle', 'triangle.exe'), @('g57-present', 'present.exe'))) {
+            $p = Start-Process -FilePath (Resolve-Path "out\$($t[1])").Path -ArgumentList "`"$dll`"" -NoNewWindow -PassThru `
+                   -RedirectStandardOutput "$($t[0]).out" -RedirectStandardError "$($t[0]).err"
+            if (-not $p.WaitForExit(120000)) { Stop-Process -Id $p.Id -Force; $res[$t[0]] = 'hang' } else { $res[$t[0]] = $p.ExitCode }
+            Write-Host "$($t[0]): $($res[$t[0]])"
+            Get-Content "$($t[0]).out", "$($t[0]).err" -ErrorAction SilentlyContinue | Select-String -NotMatch 'ioctl|  ->' | Select-Object -Last 25
+          }
+          $all = (Get-Content g57-triangle.out, g57-triangle.err -ErrorAction SilentlyContinue) -join "`n"
+          if ($res['g57-triangle'] -eq 'hang') { throw 'triangle.exe hung on the G57' }
+          if ($all -match 'using softpipe') { throw 'fell back to softpipe on the G57' }
+          if ($all -notmatch 'malikm-fake: submit') { throw 'no job was submitted on the G57' }
+          if ($res['g57-triangle'] -ne 0 -and $res['g57-triangle'] -ne 2) { throw "triangle.exe died on the G57 ($($res['g57-triangle']))" }
+          if ($res['g57-present'] -ne 0) { throw "present.exe failed on the G57 ($($res['g57-present']))" }
+
       - name: The runtime's view of the multisample answers (d3dprobe, MALIKM_FAKE)
         timeout-minutes: 10
         shell: pwsh

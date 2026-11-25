@@ -75,8 +75,8 @@ setlocal enableextensions
 set HERE=%~dp0
 set PARAMS=HKLM\SYSTEM\CurrentControlSet\Services\maliwddm\Parameters
 set JOURNAL=HKLM\SYSTEM\CurrentControlSet\Services\maliwddm\Probe
-set DEVKEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\RKCP7402\0\Device Parameters\maliwddm"
-set DEV=ACPI\RKCP7402\0
+set DEVKEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\HANA678E\0\Device Parameters\maliwddm"
+set DEV=ACPI\HANA678E\0
 set SESSION=wddm-mali-g52-dxgkrnl
 set AUTO=HKLM\SYSTEM\CurrentControlSet\Control\WMI\Autologger\%SESSION%
 set DIR=C:\mali\probe

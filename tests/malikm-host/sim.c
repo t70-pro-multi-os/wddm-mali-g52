@@ -40,7 +40,10 @@ void sim_reset(void)
     job_raw = mmu_raw = gpu_raw = 0;
     memset(slot_state, 0, sizeof(slot_state));
     sim_tile_budget = 0;
-    R(GPU_ID) = 0x74021000;
+#ifndef SIM_GPU_ID
+#define SIM_GPU_ID 0x74021000u  /* Mali-G52 r1p0 (RK3576); the G57 build sets 0x90930010 */
+#endif
+    R(GPU_ID) = SIM_GPU_ID;
     R(GPU_L2_FEATURES) = 0x07120206;
     R(GPU_CORE_FEATURES) = 0x2;
     R(GPU_TILER_FEATURES) = 0x209;

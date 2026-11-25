@@ -146,6 +146,7 @@ static NTSTATUS APIENTRY MwAddDevice(IN_CONST_PDEVICE_OBJECT Pdo, OUT_PPVOID Con
     return STATUS_SUCCESS;
 }
 
+#ifdef MALI_SOC_RK3576
 /* The GPU's clock.
  *
  * The firmware leaves clk_gpu_src_pre at GPLL / 6 = 198 MHz, which is the
@@ -566,13 +567,69 @@ static NTSTATUS GpuClk(MW_ADAPTER *A, MW_ESCAPE_GPUCLK_DATA *D, ULONG Size)
  * from HardwareInformation.* in the driver's software key; nothing fills
  * them in for a driver that does not, and they were blank. There is no
  * dedicated memory to report: every allocation is system memory. */
+#else /* MALI_SOC_MT6789 */
+/* The GPU's clock on the MT6789 is MFGPLL behind TOPCKGEN's mfg_pll_sel.
+ * The firmware (Mu-Silicium GpuPowerDxe) powers the GPU at 390 MHz with
+ * vgpu 675 mV and vsram 750 mV, the stock module's lowest operating point.
+ * This driver changes the clock only through the governor in mt6789.c
+ * (setting Dvfs, off by default); the RK3576 GpuClk setting and escape do
+ * nothing here, and there is no TSADC to read. */
+static void GpuRailInit(MW_ADAPTER *A)
+{
+    KeInitializeSpinLock(&A->ClkLock);
+    RtlZeroMemory(&A->Therm, sizeof(A->Therm));
+    A->GpuClkWanted = 0;
+    A->ThermOn = FALSE;
+    A->GpuClkHigh = 0;
+    A->RailSource = 1;
+    A->RailUv = MwMt6789Start(A);
+    MwLog(A, L"GpuRailUv", A->RailUv);
+}
+
+static NTSTATUS GpuClkWrite(MW_ADAPTER *A, ULONG Parent, ULONG Div)
+{
+    UNREFERENCED_PARAMETER(A);
+    UNREFERENCED_PARAMETER(Parent);
+    UNREFERENCED_PARAMETER(Div);
+    return STATUS_NOT_SUPPORTED;
+}
+
+static BOOLEAN GpuClkSafe(MW_ADAPTER *A)
+{
+    MwMt6789Stop(A);
+    return TRUE;
+}
+
+void MwGpuClkFallback(MW_ADAPTER *A)
+{
+    /* A job fault: back to the firmware's operating point. */
+    MwMt6789Fault(A);
+}
+
+static NTSTATUS GpuClk(MW_ADAPTER *A, MW_ESCAPE_GPUCLK_DATA *D, ULONG Size)
+{
+    UNREFERENCED_PARAMETER(A);
+    UNREFERENCED_PARAMETER(D);
+    UNREFERENCED_PARAMETER(Size);
+    return STATUS_NOT_SUPPORTED;
+}
+#endif
+
 static void PublishIdentity(MW_ADAPTER *A)
 {
+#ifdef MALI_SOC_MT6789
+    static const WCHAR chip[] = L"Arm Mali-G57 MC2 (Valhall)";
+    static const WCHAR name[] = L"MediaTek MT6789 Mali-G57";
+    static const WCHAR dac[] = L"MediaTek OVL, MIPI DSI";
+    static const WCHAR dsi[] = L"MediaTek OVL, MIPI DSI";
+    static const WCHAR bios[] = L"UEFI (Mu-Silicium, Teclast T70 Pro)";
+#else
     static const WCHAR chip[] = L"Arm Mali-G52 (Bifrost)";
     static const WCHAR name[] = L"Rockchip RK3576 Mali-G52";
     static const WCHAR dac[] = L"Rockchip VOP2, HDMI";
     static const WCHAR dsi[] = L"Rockchip VOP2, MIPI DSI";   /* an internal panel, backlight.c */
     static const WCHAR bios[] = L"UEFI (edk2-rk3576)";
+#endif
     static const struct { PCWSTR Name; const WCHAR *Text; ULONG Bytes; } v[] = {
         { L"HardwareInformation.ChipType", chip, sizeof(chip) },
         { L"HardwareInformation.AdapterString", name, sizeof(name) },
@@ -1018,6 +1075,7 @@ C_ASSERT(DXGKQAITYPE_ADAPTERPERFDATA == MW_QAI_ADAPTERPERFDATA);
 C_ASSERT(DXGKQAITYPE_ADAPTERPERFDATA_CAPS == MW_QAI_ADAPTERPERFDATA_CAPS);
 C_ASSERT(DXGKQAITYPE_GPUVERSION == MW_QAI_GPUVERSION);
 
+#ifdef MALI_SOC_RK3576
 /* The hotter of TSADC channels 3 and 5 (thermal_calc.h), through the
  * mapping GpuRailInit made once the CRU said the TSADC runs; no reading
  * without it (a read of a gated TSADC can be an SError). */
@@ -1051,6 +1109,22 @@ ULONG MwGpuClkHzNow(MW_ADAPTER *A)
     return (ULONG)MwPerfClkHz(v, MwGpuPll);
 }
 
+#else
+/* No temperature reading on the MT6789 yet. */
+int MwGpuTempMilliC(MW_ADAPTER *A, long *MilliC)
+{
+    UNREFERENCED_PARAMETER(A);
+    *MilliC = 0;
+    return 0;
+}
+
+/* MFGPLL as the APMIXED and TOPCKGEN registers have it now (mt6789.c). */
+ULONG MwGpuClkHzNow(MW_ADAPTER *A)
+{
+    return MwMt6789GpuHz(A, NULL);
+}
+#endif
+
 /* Zero the whole buffer, copy at most Size bytes of the answer. */
 static NTSTATUS PerfOut(const DXGKARG_QUERYADAPTERINFO *Info, const void *Src, ULONG Size, ULONG Need)
 {
@@ -1074,14 +1148,20 @@ static NTSTATUS MwQueryPerfData(MW_ADAPTER *A, const DXGKARG_QUERYADAPTERINFO *I
          * firmware measured at boot (GpuRail) or GpuRailUv; this driver
          * never changes it. */
         DXGK_NODE_PERFDATA d;
+#ifdef MALI_SOC_RK3576
         ULONG oc = A->ThermOn ? GpuAllowedHz(A) : MW_GPU_MAX_HZ;
+#endif
 
         if (!MwPerfNodeOk(in, MwNodeCount()))
             return STATUS_INVALID_PARAMETER;
         RtlZeroMemory(&d, sizeof(d));
         d.Frequency = MwGpuClkHzNow(A);
+#ifdef MALI_SOC_RK3576
         d.MaxFrequency = MwPerfBestHz(MW_GPU_MAX_HZ, MwGpuPll);
         d.MaxFrequencyOC = MwPerfBestHz(oc, MwGpuPll);
+#else
+        d.MaxFrequency = d.MaxFrequencyOC = MwMt6789MaxHz(A);
+#endif
         d.Voltage = A->RailUv / 1000u;
         return PerfOut(Info, &d, sizeof(d), MW_PD_NODE_SIZE);
     }
@@ -1113,7 +1193,7 @@ static NTSTATUS MwQueryPerfData(MW_ADAPTER *A, const DXGKARG_QUERYADAPTERINFO *I
 
         RtlZeroMemory(&d, sizeof(d));
         (void)RtlStringCbCopyW(d.BiosVersion, sizeof(d.BiosVersion), L"none (SoC GPU)");
-        (void)RtlStringCbCopyW(d.GpuArchitecture, sizeof(d.GpuArchitecture), L"Mali-G52 MC3 (Bifrost)");
+        (void)RtlStringCbCopyW(d.GpuArchitecture, sizeof(d.GpuArchitecture), MALI_GPU_ARCH);
         return PerfOut(Info, &d, sizeof(d), MW_PD_GPUVERSION_SIZE);
     }
     }
@@ -1428,6 +1508,7 @@ static void Stats(MW_ADAPTER *A, MW_ESCAPE_STATS_DATA *D, UINT Size)
 
 /* ---- MW_ESCAPE_PERF ---- */
 
+#ifdef MALI_SOC_RK3576
 /* The GPU clock as the CRU has it now (MW_ESCAPE_PERF_DATA.ClkSel165). A
  * read of a CRU register this driver already writes (GpuClkWrite). */
 static void GpuClkRead(mw_u32 *Raw, mw_u32 *Hz)
@@ -1482,6 +1563,22 @@ static void TempRead(MW_ADAPTER *A, MW_ESCAPE_PERF_DATA *D)
         MmUnmapIoSpace(reg, PAGE_SIZE);
 }
 
+#else
+/* MW_ESCAPE_PERF_DATA.ClkSel165 carries MFGPLL_CON1 on the MT6789. */
+static void GpuClkRead(MW_ADAPTER *A, mw_u32 *Raw, mw_u32 *Hz)
+{
+    ULONG raw = 0xFFFFFFFFu;
+    *Hz = MwMt6789GpuHz(A, &raw);
+    *Raw = raw;
+}
+
+static void TempRead(MW_ADAPTER *A, MW_ESCAPE_PERF_DATA *D)
+{
+    D->TempValid = 0;
+    D->GpuClkThermalDrops = A->GpuClkThermalDrops;
+}
+#endif
+
 static NTSTATUS EscapePerf(MW_ADAPTER *A, MW_ESCAPE_PERF_DATA *D)
 {
     NTSTATUS st;
@@ -1504,7 +1601,11 @@ static NTSTATUS EscapePerf(MW_ADAPTER *A, MW_ESCAPE_PERF_DATA *D)
     D->DpcMaxTicks = A->DpcMaxTicks;
     st = MwPerfSnapshot(A, D);
     if (A->GpuUp)
+#ifdef MALI_SOC_RK3576
         GpuClkRead(&D->ClkSel165, &D->GpuHz);
+#else
+        GpuClkRead(A, &D->ClkSel165, &D->GpuHz);
+#endif
     else
         D->ClkSel165 = D->GpuHz = 0xFFFFFFFFu;
     TempRead(A, D);

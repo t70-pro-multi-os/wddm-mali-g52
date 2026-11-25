@@ -2,7 +2,7 @@
 rem m5-pe-test: M5.2 in WinPE, booted from this stick. Nothing persists, so
 rem a driver that misbehaves costs a reboot, not an installed Windows.
 rem Loads malidod (display-only, DSP0 = ACPI\RKCP7403) and then maliwddm
-rem (render-only, GPU0 = ACPI\RKCP7402), runs m5test, and saves the device
+rem (render-only, GPU0 = ACPI\HANA678E), runs m5test, and saves the device
 rem state and both drivers' traces. Needs firmware with DSP0 and testsigning
 rem on in this stick's BCD. Output: m5-pe-out.txt here.
 setlocal
@@ -26,7 +26,7 @@ bcdedit /enum {current} >> "%OUT%" 2>&1
 echo == devices before >> "%OUT%"
 pnputil /enum-devices /class Display >> "%OUT%" 2>&1
 pnputil /enum-devices /instanceid "ACPI\RKCP7403\0" >> "%OUT%" 2>&1
-pnputil /enum-devices /instanceid "ACPI\RKCP7402\0" >> "%OUT%" 2>&1
+pnputil /enum-devices /instanceid "ACPI\HANA678E\0" >> "%OUT%" 2>&1
 
 rem XHC0 (USB-C, ACPI\PNP0D10\0) is disabled before anything else when
 rem mali\no-xhc0 is on the stick. Every run so far ended in WHEA_INTERNAL_ERROR
@@ -70,7 +70,7 @@ ping -n 11 127.0.0.1 >nul
 echo == devices after >> "%OUT%"
 pnputil /enum-devices /class Display >> "%OUT%" 2>&1
 pnputil /enum-devices /instanceid "ACPI\RKCP7403\0" >> "%OUT%" 2>&1
-pnputil /enum-devices /instanceid "ACPI\RKCP7402\0" >> "%OUT%" 2>&1
+pnputil /enum-devices /instanceid "ACPI\HANA678E\0" >> "%OUT%" 2>&1
 
 %SAVE% >nul
 echo == m5test >> "%OUT%"
@@ -131,7 +131,7 @@ pnputil /enum-devices /connected /class USB >> "%OUT%" 2>&1
 pnputil /enum-devices /connected /class DiskDrive >> "%OUT%" 2>&1
 
 echo == maliwddm trace >> "%OUT%"
-reg query "%KEY%\RKCP7402\0\Device Parameters\maliwddm" >> "%OUT%" 2>&1
+reg query "%KEY%\HANA678E\0\Device Parameters\maliwddm" >> "%OUT%" 2>&1
 echo == malidod trace >> "%OUT%"
 reg query "%KEY%\RKCP7403\0\Device Parameters" >> "%OUT%" 2>&1
 copy /y X:\m5-pe-out.txt "%HERE%m5-pe-out.txt" >nul

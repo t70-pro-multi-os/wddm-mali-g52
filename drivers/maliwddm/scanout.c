@@ -53,6 +53,8 @@
 
 #include "maliwddm.h"
 
+#ifdef MALI_SOC_RK3576
+
 #define VOP_PA                  0x27D00000u
 #define VOP_SIZE                0x8000u
 #define VOP_CFG_DONE            0x0000u
@@ -630,3 +632,5 @@ void MwScanStop(MW_ADAPTER *A)
     /* If translation would not go off the tables stay: the VOP2 still
      * reads the framebuffer through them. */
 }
+
+#endif /* MALI_SOC_RK3576 */

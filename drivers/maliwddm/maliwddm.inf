@@ -1,8 +1,10 @@
 ;
-; maliwddm.inf - milestone M5.2: the full WDDM driver (2.0 by default, 1.3 on request) for the RK3576's
-; Mali-G52 and its display (docs/M5.2-PLAN.md). Binds ACPI\RKCP7402 (GPU0 in
-; the edk2-rk3576 CM5-IO DSDT), the device m1probe and malikm bind:
-; only one of them can be installed at a time.
+; maliwddm.inf - the full WDDM driver (2.0 by default, 1.3 on request). This
+; mt6789 branch builds it for the Mali-G57 MC2 of the MediaTek MT6789 and the
+; T70 Pro's DSI panel (docs/MT6789.md); upstream's RK3576 build binds
+; ACPI\RKCP7402. Binds ACPI\HANA678E, GPU0 in the Mu-Silicium T70 Pro DSDT,
+; present only when the firmware powered the GPU; malikm binds the same
+; device: only one of them can be installed at a time.
 ;
 ; The user-mode driver is Mesa's d3d10umd with Panfrost (mesa.yml), built
 ; three times, because a process loads a UMD of its own kind:
@@ -62,7 +64,7 @@ maligl_x86.dll    = 1
 %ProviderName% = Standard,NTARM64.10.0...16299
 
 [Standard.NTARM64.10.0...16299]
-%MW.DeviceDesc% = MW_Inst,ACPI\RKCP7402
+%MW.DeviceDesc% = MW_Inst,ACPI\HANA678E
 
 [MW_Inst]
 FeatureScore = F9
@@ -141,9 +143,9 @@ LoadOrderGroup = Video
 
 [Strings]
 ProviderName  = "wddm-mali-g52"
-DiskName      = "RK3576 Mali-G52 WDDM driver"
-MW.DeviceDesc = "Rockchip RK3576 Mali-G52 (WDDM)"
-MW.SvcDesc    = "RK3576 Mali-G52 WDDM driver"
+DiskName      = "MT6789 Mali-G57 WDDM driver"
+MW.DeviceDesc = "MediaTek MT6789 Mali-G57 MC2 (WDDM)"
+MW.SvcDesc    = "MT6789 Mali-G57 WDDM driver"
 REG_DWORD     = 0x00010001
 REG_SZ        = 0x00000000
 REG_MULTI_SZ  = 0x00010000

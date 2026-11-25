@@ -198,11 +198,17 @@ PVOID MmMapLockedPagesSpecifyCache(PMDL m, int mode, MEMORY_CACHING_TYPE c, PVOI
 
 void MmUnmapLockedPages(PVOID va, PMDL m) { (void)va; (void)m; }
 
-/* The PMU: all zero reads as "PD_GPU on, bus not idle". */
+/* The RK3576 PMU: all zero reads as "PD_GPU on, bus not idle". The MT6789
+ * SPM (0x10006000): MFG0..3 on in PWR_STATUS and PWR_STATUS_2ND. */
 static ULONG pmu[1024];
+static ULONG spm[1024];
 PVOID MmMapIoSpaceEx(PHYSICAL_ADDRESS pa, SIZE_T n, ULONG prot)
 {
-    (void)pa; (void)n; (void)prot;
+    (void)n; (void)prot;
+    if (pa.QuadPart == 0x10006000) {
+        spm[0x16C / 4] = spm[0x170 / 4] = 0x3Cu;
+        return spm;
+    }
     return pmu;
 }
 void MmUnmapIoSpace(PVOID va, SIZE_T n) { (void)va; (void)n; }

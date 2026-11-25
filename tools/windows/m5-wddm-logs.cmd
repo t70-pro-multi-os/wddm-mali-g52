@@ -12,9 +12,9 @@ powershell -NoProfile -Command ^
  "Get-WinEvent -ListLog *DxgKrnl* -ErrorAction SilentlyContinue | Format-Table LogName,RecordCount -AutoSize | Out-String -Width 200;" ^
  "foreach($l in (Get-WinEvent -ListLog *DxgKrnl* -ErrorAction SilentlyContinue)){ if($l.RecordCount){ '==== '+$l.LogName; Get-WinEvent -LogName $l.LogName -MaxEvents 60 -ErrorAction SilentlyContinue | Where-Object {$_.TimeCreated -gt $since} | Format-List TimeCreated,Id,LevelDisplayName,Message | Out-String -Width 300 } };" ^
  "'==== System (display, PnP, kernel-pnp)';" ^
- "Get-WinEvent -FilterHashtable @{LogName='System';StartTime=$since} -ErrorAction SilentlyContinue | Where-Object { $_.ProviderName -match 'Display|dxg|Kernel-PnP|UserPnp|Video' -or $_.Message -match 'RKCP7402|maliwddm' } | Format-List TimeCreated,ProviderName,Id,LevelDisplayName,Message | Out-String -Width 300;" ^
+ "Get-WinEvent -FilterHashtable @{LogName='System';StartTime=$since} -ErrorAction SilentlyContinue | Where-Object { $_.ProviderName -match 'Display|dxg|Kernel-PnP|UserPnp|Video' -or $_.Message -match 'HANA678E|maliwddm' } | Format-List TimeCreated,ProviderName,Id,LevelDisplayName,Message | Out-String -Width 300;" ^
  "'==== device';" ^
- "Get-PnpDevice -InstanceId 'ACPI\RKCP7402\0' | Get-PnpDeviceProperty | Where-Object { $_.KeyName -match 'ProblemCode|ProblemStatus|DriverVersion|DriverInfPath|LastArrival' } | Format-Table KeyName,Data -AutoSize | Out-String -Width 200" >> "%OUT%" 2>&1
+ "Get-PnpDevice -InstanceId 'ACPI\HANA678E\0' | Get-PnpDeviceProperty | Where-Object { $_.KeyName -match 'ProblemCode|ProblemStatus|DriverVersion|DriverInfPath|LastArrival' } | Format-Table KeyName,Data -AutoSize | Out-String -Width 200" >> "%OUT%" 2>&1
 echo ==== setupapi.dev.log, last 80 lines >> "%OUT%"
 powershell -NoProfile -Command "Get-Content $env:windir\INF\setupapi.dev.log -Tail 80" >> "%OUT%" 2>&1
 type "%OUT%"

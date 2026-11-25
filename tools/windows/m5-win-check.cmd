@@ -7,8 +7,8 @@ net session >nul 2>&1 || (echo Run this from an ADMINISTRATOR command prompt. & 
 setlocal
 set HERE=%~dp0
 set OUT=%HERE%m5-win-check-out.txt
-set DEV=ACPI\RKCP7402\0
-set KEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\RKCP7402\0\Device Parameters"
+set DEV=ACPI\HANA678E\0
+set KEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\HANA678E\0\Device Parameters"
 echo m5-win-check %date% %time% > "%OUT%"
 
 echo == device >> "%OUT%"

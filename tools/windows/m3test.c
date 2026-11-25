@@ -64,11 +64,16 @@ static double now_ms(void)
     return (double)c.QuadPart * 1000.0 / (double)f.QuadPart;
 }
 
-/* M1's job: a WRITE_VALUE header at +0, its payload at +32. */
+/* The GPU's architecture major (GPU_PROD_ID >> 12): 7 for the G52, 9 for the G57. */
+static unsigned g_arch;
+
+/* M1's job: a WRITE_VALUE header at +0, its payload at +32. Bifrost has an
+ * is_64b bit (word 4 bit 0); Valhall (v9) has none, all its jobs are 64-bit,
+ * and wants job descriptors 128-byte aligned (the BO start here is). */
 static void write_job(volatile uint32_t *job, mk_u64 target, uint32_t value)
 {
     memset((void *)job, 0, 64);
-    job[4] = 1u | (2u << 1) | (1u << 16);   /* is_64b, WRITE_VALUE, index 1 */
+    job[4] = (g_arch < 9 ? 1u : 0u) | (2u << 1) | (1u << 16);   /* [is_64b,] WRITE_VALUE, index 1 */
     job[8] = (uint32_t)target;
     job[9] = (uint32_t)(target >> 32);
     job[10] = 6;                             /* immediate 32 */
@@ -125,10 +130,12 @@ int main(void)
            param(0), param(1), param(2), param(4));
     printf("MMU_FEATURES 0x%llx  THREAD_FEATURES 0x%llx  MAX_THREADS %llu  JS_PRESENT 0x%llx\n",
            param(12), param(13), param(14), param(7));
-    if (param(0) != 0x7402) {
-        printf("FAIL: not a Mali-G52\n");
+    /* The G52 (0x7402) on the RK3576 or the G57 (0x9093) on the MT6789. */
+    if (param(0) != 0x7402 && param(0) != 0x9093) {
+        printf("FAIL: not a Mali-G52 or Mali-G57\n");
         return 1;
     }
+    g_arch = (unsigned)(param(0) >> 12);
 
     CREATE_BO c = {4096, 0};
     if (drm(MALIKM_NR_PANFROST_CREATE_BO, &c, sizeof(c), NULL, 0)) {

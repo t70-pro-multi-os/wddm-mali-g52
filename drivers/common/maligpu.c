@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * The Mali-G52 itself: see maligpu.h. Moved out of drivers/malikm/gpu.c
+ * The Mali GPU itself: see maligpu.h. Moved out of drivers/malikm/gpu.c
  * unchanged in behaviour, so the WDDM driver can share it.
  */
 #include "maligpu.h"
@@ -20,14 +20,16 @@ static BOOLEAN Poll(MK_GPU *Gpu, ULONG Off, ULONG Mask, ULONG Want, ULONG Us)
 
 enum { STEP_PMU = 1, STEP_ID, STEP_RESET, STEP_POWER, STEP_MMU, STEP_READY };
 
-/* The firmware powers PD_GPU and sets its clock. A GPU access while the
+/* The firmware powers the GPU and sets its clock. A GPU access while the
  * domain is off or its bus is idle is an SError, so look before touching. */
-static BOOLEAN PmuSaysGpuIsOn(void)
+#ifdef MALI_SOC_RK3576
+static BOOLEAN PmuSaysGpuIsOn(MK_GPU *Gpu)
 {
     PHYSICAL_ADDRESS pa;
     volatile ULONG *pmu;
     ULONG status, ack;
 
+    (void)Gpu;
     pa.QuadPart = PMU_PA;
     pmu = (volatile ULONG *)MmMapIoSpaceEx(pa, 0x1000, PAGE_READWRITE | PAGE_NOCACHE);
     if (pmu == NULL)
@@ -37,6 +39,28 @@ static BOOLEAN PmuSaysGpuIsOn(void)
     MmUnmapIoSpace((PVOID)pmu, 0x1000);
     return ((status >> 25) & 1) == 0 && (ack & 1) == 0;
 }
+#else
+/* MT6789: MFG0..MFG3 on in both SPM status registers. The DSDT already hides
+ * GPU0 unless the firmware powered the GPU and read GPU_ID back; this is the
+ * same check made again, so a GPU powered off later is never touched. */
+static BOOLEAN PmuSaysGpuIsOn(MK_GPU *Gpu)
+{
+    PHYSICAL_ADDRESS pa;
+    volatile ULONG *spm;
+    ULONG status, status2;
+
+    pa.QuadPart = SPM_PA;
+    spm = (volatile ULONG *)MmMapIoSpaceEx(pa, 0x1000, PAGE_READWRITE | PAGE_NOCACHE);
+    if (spm == NULL)
+        return FALSE;
+    status = READ_REGISTER_ULONG((PULONG)((PUCHAR)spm + SPM_PWR_STATUS));
+    status2 = READ_REGISTER_ULONG((PULONG)((PUCHAR)spm + SPM_PWR_STATUS_2ND));
+    MmUnmapIoSpace((PVOID)spm, 0x1000);
+    MK_LOG(Gpu, L"SpmPwrStatus", status);
+    MK_LOG(Gpu, L"SpmPwrStatus2nd", status2);
+    return (status & SPM_MFG_ALL) == SPM_MFG_ALL && (status2 & SPM_MFG_ALL) == SPM_MFG_ALL;
+}
+#endif
 
 static void ReadFeatures(MK_GPU *Gpu)
 {
@@ -92,8 +116,12 @@ static BOOLEAN GpuPowerOn(MK_GPU *Gpu)
 {
     GPU_FEATURES *f = &Gpu->F;
 
-    /* panfrost_gpu_init_quirks for a G52: no shader quirks, TILER_CONFIG
-     * written back as read, the default IDVS group size. */
+    /* panfrost_gpu_init_quirks: on a G52 no shader quirks; on a G57 TLS
+     * hashing and the varying algorithm. TILER_CONFIG written back as read,
+     * the default IDVS group size on both. */
+#ifdef MALI_SOC_MT6789
+    MK_WR(Gpu, GPU_SHADER_CONFIG, SC_TLS_HASH_ENABLE | SC_VAR_ALGORITHM);
+#endif
     MK_WR(Gpu, GPU_TILER_CONFIG, MK_RD(Gpu, GPU_TILER_CONFIG));
     MK_WR(Gpu, GPU_JM_CONFIG, JM_DEFAULT_IDVS_GROUP_SIZE << JM_IDVS_GROUP_SIZE_SHIFT);
 
@@ -144,12 +172,12 @@ BOOLEAN MkGpuBringup(MK_GPU *Gpu)
 NTSTATUS MkGpuInit(MK_GPU *Gpu)
 {
     MK_LOG(Gpu, L"Step", STEP_PMU);
-    if (!PmuSaysGpuIsOn())
+    if (!PmuSaysGpuIsOn(Gpu))
         return STATUS_DEVICE_NOT_READY;
 
     MK_LOG(Gpu, L"Step", STEP_ID);
     MK_LOG(Gpu, L"GpuId", MK_RD(Gpu, GPU_ID));
-    if ((MK_RD(Gpu, GPU_ID) >> 16) != 0x7402)
+    if ((MK_RD(Gpu, GPU_ID) >> 16) != MALI_GPU_ID)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
 
     MK_LOG(Gpu, L"Step", STEP_RESET);

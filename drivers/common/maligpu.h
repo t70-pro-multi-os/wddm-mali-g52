@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * The Mali-G52 itself, shared by malikm (KMDF, Panfrost uAPI) and the WDDM
- * driver: power-up and reset, the GPU's page tables and address space, the
+ * The Mali GPU itself (G52 on the RK3576, G57 on the MT6789), shared by
+ * malikm (KMDF, Panfrost uAPI) and the WDDM driver: power-up and reset, the GPU's page tables and address space, the
  * job slots and the interrupt status. No WDF, no scheduling, no objects:
  * the drivers decide who maps what and when jobs run.
  *
@@ -12,10 +12,39 @@
 #pragma once
 #include <ntddk.h>
 
-/* ---- registers (names and offsets as in Linux panfrost_regs.h) ---- */
+/* ---- the SoC this build is for ----
+ * The mt6789 branch builds for the MediaTek MT6789 (Mali-G57 MC2, Valhall v9
+ * job manager) in the Teclast T70 Pro unless MALI_SOC_RK3576 is defined, which
+ * gives upstream's RK3576 (Mali-G52 MC3, Bifrost) build. The register
+ * interface the drivers use is the same on both; what differs is how the
+ * driver tells the GPU is powered, the GPU_ID it expects and the core quirks. */
+#if !defined(MALI_SOC_RK3576) && !defined(MALI_SOC_MT6789)
+#define MALI_SOC_MT6789 1
+#endif
+
+#ifdef MALI_SOC_RK3576
+/* RK3576: the firmware powers PD_GPU; PMU STATUS0 bit 25 clear and ACK0 bit 0
+ * clear mean the domain is on and its bus is not idle. */
 #define PMU_PA                  0x27380000ULL
 #define PMU_ACK0                0x120
 #define PMU_STATUS0             0x230
+#define MALI_GPU_ID             0x7402      /* GPU_ID >> 16: Mali-G52 */
+#define MALI_GPU_NAME           L"Mali-G52"
+#define MALI_GPU_ARCH           L"Mali-G52 MC3 (Bifrost)"
+#else
+/* MT6789: the UEFI (Mu-Silicium GpuPowerDxe) powers MFG0..MFG3; the SPM's
+ * PWR_STATUS and PWR_STATUS_2ND both carry one bit per domain, bits 2-5,
+ * and a domain is on when both bits are set (docs/MT6789-POWER.md). */
+#define SPM_PA                  0x10006000ULL
+#define SPM_PWR_STATUS          0x16C
+#define SPM_PWR_STATUS_2ND      0x170
+#define SPM_MFG_ALL             (0xFu << 2)
+#define MALI_GPU_ID             0x9093      /* GPU_ID >> 16: Mali-G57 (Mesa PAN_PROD_ID(9, 0, 3)) */
+#define MALI_GPU_NAME           L"Mali-G57"
+#define MALI_GPU_ARCH           L"Mali-G57 MC2 (Valhall)"
+#endif
+
+/* ---- registers (names and offsets as in Linux panfrost_regs.h) ---- */
 
 #define GPU_ID                  0x000
 #define GPU_L2_FEATURES         0x004
@@ -57,7 +86,13 @@
 #define GPU_STACK_PRESENT_LO    0xE00
 #define GPU_STACK_PRESENT_HI    0xE04
 #define GPU_JM_CONFIG           0xF00
+#define GPU_SHADER_CONFIG       0xF04
 #define GPU_TILER_CONFIG        0xF08
+
+/* GPU_SHADER_CONFIG bits Linux panfrost sets on a G57: TLS hashing
+ * (HW_FEATURE_TLS_HASHING) and the varying algorithm for TTRX_2968/3162. */
+#define SC_TLS_HASH_ENABLE      (1u << 17)
+#define SC_VAR_ALGORITHM        (1u << 29)
 
 #define GPU_CMD_SOFT_RESET      0x01
 #define GPU_CMD_HARD_RESET      0x02

@@ -11,7 +11,7 @@ rem   vc_redist.arm64.exe             (https://aka.ms/vs/17/release/vc_redist.ar
 net session >nul 2>&1 || (echo Run this from an ADMINISTRATOR command prompt. & exit /b 1)
 set HERE=%~dp0
 set OUT=%HERE%m3-out.txt
-set KEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\RKCP7402\0\Device Parameters"
+set KEY="HKLM\SYSTEM\CurrentControlSet\Enum\ACPI\HANA678E\0\Device Parameters"
 echo m3-test %date% %time% > "%OUT%"
 
 rem triangle.exe, present.exe and the Mesa DLL need the VC++ runtime.
@@ -22,7 +22,7 @@ if not exist "%SystemRoot%\System32\vcruntime140.dll" (
 )
 
 echo == GPU device before >> "%OUT%"
-pnputil /enum-devices /instanceid "ACPI\RKCP7402\0" >> "%OUT%" 2>&1
+pnputil /enum-devices /instanceid "ACPI\HANA678E\0" >> "%OUT%" 2>&1
 
 rem m1probe binds the same device; take it off first.
 echo == removing m1probe, if installed >> "%OUT%"
@@ -36,7 +36,7 @@ pnputil /add-driver "%HERE%malikm\malikm.inf" /install >> "%OUT%" 2>&1
 timeout /t 5 /nobreak >nul
 
 echo == device after install >> "%OUT%"
-pnputil /enum-devices /instanceid "ACPI\RKCP7402\0" >> "%OUT%" 2>&1
+pnputil /enum-devices /instanceid "ACPI\HANA678E\0" >> "%OUT%" 2>&1
 echo == driver registry values >> "%OUT%"
 reg query %KEY% >> "%OUT%" 2>&1
 

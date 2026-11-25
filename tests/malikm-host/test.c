@@ -135,8 +135,12 @@ int main(void)
     CHECK(sim.as_updates == 1, "AS0 programmed %u times", sim.as_updates);
 
     /* GET_PARAM, as Linux reports this G52. */
-    CHECK(param(0, &r) == 0x7402 && r == 0, "prod id");
-    CHECK(param(1, &r) == 0x1000, "revision");
+#ifndef SIM_PROD
+#define SIM_PROD 0x7402
+#define SIM_REV 0x1000
+#endif
+    CHECK(param(0, &r) == SIM_PROD && r == 0, "prod id");
+    CHECK(param(1, &r) == SIM_REV, "revision");
     CHECK(param(2, &r) == 0x7, "shader present");
     CHECK(param(12, &r) == 0x2823, "mmu features");
     CHECK(param(38, &r) == 1, "core groups");

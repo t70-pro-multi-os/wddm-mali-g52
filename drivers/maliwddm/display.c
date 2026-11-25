@@ -389,7 +389,11 @@ NTSTATUS MwDisplayStart(MW_ADAPTER *A)
     A->ScrW = A->Fb.Width;
     A->ScrH = A->Fb.Height;
     A->ScrHow = MW_SCL_IDENTITY;
+#ifdef MALI_SOC_MT6789
+    A->ScaledModes = FALSE;     /* no scaler set up on the MT6789 (scanout_mt6789.c) */
+#else
     A->ScaledModes = MwSetting(A, L"ScaledModes", 1) != 0 && A->ScanReady && A->Hdmi.Level < 3;
+#endif
     A->ModeCount = MwSclModes(A->Fb.Width, A->Fb.Height, A->EdidSize ? A->Edid : NULL, A->EdidSize,
                               A->ScaledModes, A->Modes, MW_SCL_MAX_MODES);
     MwLog(A, L"ScaledModes", A->ScaledModes);
@@ -455,7 +459,11 @@ NTSTATUS APIENTRY MwQueryChildRelations(IN_CONST_PVOID MiniportDeviceContext,
     RtlZeroMemory(ChildRelations, sizeof(DXGK_CHILD_DESCRIPTOR));
     ChildRelations[0].ChildDeviceType = TypeVideoOutput;
     ChildRelations[0].ChildCapabilities.Type.VideoOutput.InterfaceTechnology =
+#ifdef MALI_SOC_MT6789
+        D3DKMDT_VOT_INTERNAL;           /* the T70 Pro's DSI panel; there is no HDMI */
+#else
         dev->BlVa != NULL ? D3DKMDT_VOT_INTERNAL : D3DKMDT_VOT_HDMI;
+#endif
     ChildRelations[0].ChildCapabilities.Type.VideoOutput.MonitorOrientationAwareness = D3DKMDT_MOA_NONE;
     ChildRelations[0].ChildCapabilities.Type.VideoOutput.SupportsSdtvModes = FALSE;
     ChildRelations[0].ChildCapabilities.HpdAwareness = HpdAwarenessAlwaysConnected;
